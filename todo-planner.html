@@ -65,14 +65,19 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
 .empty{text-align:center;color:var(--mute);padding:26px 0}
 .alarm .big{font-size:2rem;font-weight:800;font-variant-numeric:tabular-nums;margin:6px 0}
 .alarm .row{margin-bottom:10px}
-#ring,#edit{position:fixed;inset:0;background:rgba(10,14,25,.7);display:none;place-items:center;z-index:9}
-#ring.on,#edit.on{display:grid}
-#edit>.box{background:var(--card);border-radius:16px;padding:22px;width:min(380px,92vw)}
-#edit h2{margin-bottom:12px;font-size:1.1rem}
-#edit .row2{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
+#ring,#edit,#tm,#snd{position:fixed;inset:0;background:rgba(10,14,25,.7);display:none;place-items:center;z-index:9}
+#ring.on,#edit.on,#tm.on,#snd.on{display:grid}
+#edit>.box,#tm>.box,#snd>.box{background:var(--card);border-radius:16px;padding:22px;width:min(420px,92vw);max-height:90vh;overflow:auto}
+#edit h2,#tm h2,#snd h2{margin-bottom:12px;font-size:1.1rem}
+#edit .row2,#tm .row2,#snd .row2{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
 #ring div{background:var(--card);border-radius:16px;padding:28px;text-align:center;max-width:320px}
 #ring h2{margin-bottom:6px}
 #ring p{color:var(--mute);margin-bottom:16px}
+.trow{display:grid;grid-template-columns:42px 1fr auto;gap:8px;margin-bottom:8px}
+.trow input[type=color]{width:42px;height:36px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+#snd input[type=range]{width:100%;accent-color:var(--acc)}
+.hint{font-size:.75rem;color:var(--mute);margin:4px 0 10px}
+#terr{color:var(--bad);min-height:1em}
 </style>
 </head>
 <body>
@@ -107,6 +112,7 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
         </div>
         <div><label for="nd">Tanggal</label><input type="date" id="nd"></div>
         <button class="btn pri" id="add">Tambah tugas</button>
+        <button class="btn" id="mtypes">Kelola tipe tugas</button>
       </div>
     </section>
 
@@ -119,6 +125,7 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
       <div class="meta" id="albl">Belum ada alarm aktif</div>
       <div class="big" id="cd">--:--</div>
       <button class="btn" id="astop" style="width:100%" disabled>Batalkan</button>
+      <button class="btn" id="asnd" style="width:100%;margin-top:8px">Atur suara alarm</button>
     </section>
   </div>
 
@@ -138,6 +145,23 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
   </section>
 </main>
 
+<div id="tm"><div class="box" role="dialog" aria-label="Kelola tipe tugas"><h2>Kelola tipe tugas</h2>
+  <div id="tlist"></div>
+  <button class="btn" id="tadd" style="width:100%">+ Tambah tipe</button>
+  <p class="hint">Mengubah nama tipe ikut mengubah tugas yang memakainya. Tugas dari tipe yang dihapus dipindah ke tipe pertama.</p>
+  <div id="terr" class="hint"></div>
+  <div class="row2"><button class="btn" id="tcancel">Batal</button><button class="btn pri" id="tsave">Simpan</button></div>
+</div></div>
+<div id="snd"><div class="box" role="dialog" aria-label="Pengaturan suara alarm"><h2>Pengaturan suara alarm</h2><div class="f">
+  <div><label for="smode">Sumber suara</label><select id="smode"><option value="tone">Nada bawaan</option><option value="url">Link audio</option></select></div>
+  <div id="sTone"><label for="spre">Jenis nada</label><select id="spre"></select>
+    <label for="spit" style="margin-top:10px">Tinggi nada: <span id="spitv"></span></label><input type="range" id="spit" min="-12" max="12" step="1"></div>
+  <div id="sUrl"><label for="surl">Link audio (mp3, wav, ogg)</label><input type="text" id="surl" placeholder="https://contoh.com/suara.mp3">
+    <p class="hint">Harus link langsung ke file audio. Link YouTube atau Spotify tidak bisa. Kalau gagal diputar, nada bawaan dipakai.</p></div>
+  <div><label for="svol">Volume: <span id="svolv"></span></label><input type="range" id="svol" min="0" max="100"></div>
+  <div><label for="srep">Pengulangan</label><select id="srep"><option value="1">1 kali</option><option value="3">3 kali</option><option value="10">10 kali</option><option value="inf">Sampai dimatikan</option></select></div>
+  <div class="row2"><button class="btn" id="stest">Tes suara</button><button class="btn" id="sstop">Stop</button><button class="btn pri" id="sclose">Selesai</button></div>
+</div></div></div>
 <div id="edit"><div class="box" role="dialog" aria-label="Edit tugas"><h2>Edit tugas</h2><div class="f">
   <div><label for="et">Judul</label><input type="text" id="et"></div>
   <div class="row">
@@ -151,13 +175,15 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
 
 <script>
 const $=s=>document.querySelector(s);
-const COL={Tugas:'#007EA7',Ujian:'#c8553d',Proyek:'#5c5a9e',Bacaan:'#2a9d8f',Lainnya:'#8a7a2f'};
+const col=t=>((S.types||[]).find(x=>x.name===t)||{}).color||'#888';
 const BLN=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 const pad=n=>String(n).padStart(2,'0');
 const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const today=ymd(new Date());
-let S={tasks:[],theme:'light',bright:100};
+let S={tasks:[],theme:'light',bright:100,
+ types:[{name:'Tugas',color:'#007EA7'},{name:'Ujian',color:'#c8553d'},{name:'Proyek',color:'#5c5a9e'},{name:'Bacaan',color:'#2a9d8f'},{name:'Lainnya',color:'#8a7a2f'}],
+ al:{mode:'tone',pre:'beep',pit:0,vol:70,rep:'inf',url:''}};
 try{const r=localStorage.getItem('planner');if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
 const save=()=>{try{localStorage.setItem('planner',JSON.stringify(S))}catch(e){}};
 let sel=today, vm=new Date(); vm.setDate(1);
@@ -222,10 +248,10 @@ function render(){
   const cmp={date:(a,b)=>a.date.localeCompare(b.date),dur:(a,b)=>b.dur-a.dur,prog:(a,b)=>b.prog-a.prog,title:(a,b)=>a.title.localeCompare(b.title),type:(a,b)=>a.type.localeCompare(b.type)};
   L.sort(cmp[so]);
   $('#list').innerHTML=L.length?L.map(t=>`
-  <div class="t${t.prog===100?' done':''}" style="--c:${COL[t.type]}" data-id="${t.id}">
+  <div class="t${t.prog===100?' done':''}" style="--c:${col(t.type)}" data-id="${t.id}">
     <input type="checkbox" ${t.prog===100?'checked':''} aria-label="Selesai">
     <div><div class="ti">${esc(t.title)}</div>
-      <div class="meta"><span class="badge">${t.type}</span>${t.dur} menit · ${new Date(t.date+'T00:00').toLocaleDateString('id-ID',{day:'numeric',month:'short'})}</div></div>
+      <div class="meta"><span class="badge">${esc(t.type)}</span>${t.dur} menit · ${new Date(t.date+'T00:00').toLocaleDateString('id-ID',{day:'numeric',month:'short'})}</div></div>
     <div class="acts"><button class="btn" data-a="edit" title="Edit tugas">✎</button><button class="btn" data-a="rest" title="Mulai alarm istirahat">⏰</button><button class="btn" data-a="del" title="Hapus">✕</button></div>
     <div class="pg"><div class="bar${t.prog===100?' ok':''}"><b style="width:${t.prog}%"></b></div><span>${t.prog}%</span>
       <input type="range" min="0" max="100" step="5" value="${t.prog}" aria-label="Progres tugas" style="grid-column:1/-1"></div>
@@ -271,22 +297,71 @@ function upd(){
   if(left<=0)fire();
 }
 function stopAlarm(){clearInterval(tick);tick=null;$('#cd').textContent='--:--';$('#albl').textContent='Belum ada alarm aktif';$('#astop').disabled=true}
-function beep(){
-  if(!actx)return;
-  [0,.35,.7].forEach(d=>{const o=actx.createOscillator(),g=actx.createGain();
-    o.frequency.value=880;o.connect(g);g.connect(actx.destination);
-    g.gain.setValueAtTime(.25,actx.currentTime+d);g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+d+.3);
-    o.start(actx.currentTime+d);o.stop(actx.currentTime+d+.3)});
+const PRE={beep:{n:'Beep',w:'sine',f:[880,880,880],d:.25},bell:{n:'Lonceng',w:'triangle',f:[1047,784,1047],d:.4},digital:{n:'Digital',w:'square',f:[1200,900,1200,900],d:.15},soft:{n:'Lembut',w:'sine',f:[523,659,784],d:.35}};
+const AC=window.AudioContext||window.webkitAudioContext;
+let au=null,rt=null,played=0,limit=0;
+function synth(){
+  if(!actx){try{actx=new AC()}catch(e){return}}
+  if(actx.resume)actx.resume();
+  const p=PRE[S.al.pre]||PRE.beep,k=Math.pow(2,S.al.pit/12),v=Math.max(.0002,.4*S.al.vol/100);
+  p.f.forEach((f,i)=>{const o=actx.createOscillator(),g=actx.createGain(),t=actx.currentTime+i*p.d*1.2;
+    o.type=p.w;o.frequency.value=f*k;o.connect(g);g.connect(actx.destination);
+    g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0001,t+p.d);o.start(t);o.stop(t+p.d)});
 }
-let ringTimer=null;
+function stopRing(){clearTimeout(rt);if(au){au.onended=null;au.onerror=null;au.pause();au=null}played=limit=0}
+function nextSound(){
+  played++;const more=played<limit,p=PRE[S.al.pre]||PRE.beep,plen=p.f.length*p.d*1200+600;
+  const again=()=>{if(more)rt=setTimeout(nextSound,plen)};
+  if(S.al.mode==='url'&&S.al.url){
+    let failed=false;const fb=()=>{if(failed)return;failed=true;au=null;synth();again()};
+    au=new Audio(S.al.url);au.volume=S.al.vol/100;
+    au.onended=()=>{if(more)nextSound()};au.onerror=fb;
+    au.play().catch(fb);
+  }else{synth();again()}
+}
+function startRing(n){stopRing();limit=n||(S.al.rep==='inf'?Infinity:+S.al.rep);nextSound()}
+/* Pengaturan suara */
+$('#spre').innerHTML=Object.entries(PRE).map(([k,v])=>`<option value="${k}">${v.n}</option>`).join('');
+function syncSnd(){
+  $('#spitv').textContent=(S.al.pit>0?'+':'')+S.al.pit+' nada';$('#svolv').textContent=S.al.vol+'%';
+  $('#sTone').style.display=S.al.mode==='tone'?'':'none';$('#sUrl').style.display=S.al.mode==='url'?'':'none';
+}
+$('#asnd').onclick=()=>{const A=S.al;$('#smode').value=A.mode;$('#spre').value=A.pre;$('#spit').value=A.pit;$('#surl').value=A.url;$('#svol').value=A.vol;$('#srep').value=A.rep;syncSnd();$('#snd').classList.add('on')};
+$('#snd').addEventListener('input',()=>{
+  const A=S.al;A.mode=$('#smode').value;A.pre=$('#spre').value;A.pit=+$('#spit').value;A.url=$('#surl').value.trim();A.vol=+$('#svol').value;A.rep=$('#srep').value;
+  if(au)au.volume=A.vol/100;syncSnd();save();
+});
+$('#stest').onclick=()=>startRing(1);
+$('#sstop').onclick=stopRing;
+$('#sclose').onclick=()=>{stopRing();$('#snd').classList.remove('on')};
+/* Kelola tipe */
+function fillTypes(){
+  const o=S.types.map(t=>`<option>${esc(t.name)}</option>`).join('');
+  ['#ntype','#etype'].forEach(id=>{const e=$(id),v=e.value;e.innerHTML=o;if(S.types.some(t=>t.name===v))e.value=v});
+  const f=$('#ftype'),v=f.value;f.innerHTML='<option value="">Semua tipe</option>'+o;f.value=S.types.some(t=>t.name===v)?v:'';
+}
+const trow=t=>`<div class="trow" data-old="${esc(t.name)}"><input type="color" value="${t.color}" aria-label="Warna tipe"><input type="text" value="${esc(t.name)}" aria-label="Nama tipe" placeholder="Nama tipe"><button class="btn" data-del title="Hapus tipe">✕</button></div>`;
+$('#mtypes').onclick=()=>{$('#tlist').innerHTML=S.types.map(trow).join('');$('#terr').textContent='';$('#tm').classList.add('on')};
+$('#tadd').onclick=()=>{$('#tlist').insertAdjacentHTML('beforeend',trow({name:'',color:'#007EA7'}));$('#tlist').lastElementChild.children[1].focus()};
+$('#tlist').onclick=e=>{if(e.target.closest('[data-del]'))e.target.closest('.trow').remove()};
+$('#tcancel').onclick=()=>$('#tm').classList.remove('on');
+$('#tsave').onclick=()=>{
+  const L=[...$('#tlist').children].map(r=>({old:r.dataset.old,color:r.children[0].value,name:r.children[1].value.trim()}));
+  const err=!L.length?'Minimal harus ada satu tipe.':L.some(x=>!x.name)?'Nama tipe tidak boleh kosong.':new Set(L.map(x=>x.name.toLowerCase())).size<L.length?'Nama tipe tidak boleh kembar.':'';
+  if(err){$('#terr').textContent=err;return}
+  S.tasks.forEach(t=>{const f=L.find(x=>x.old===t.type);t.type=f?f.name:L[0].name});
+  S.types=L.map(({name,color})=>({name,color}));
+  save();fillTypes();render();$('#tm').classList.remove('on');
+};
+
 function fire(){
   stopAlarm();
   $('#rmsg').textContent=label?`Saatnya kembali ke: ${label}`:'Saatnya kembali bekerja.';
   $('#ring').classList.add('on');
-  beep();ringTimer=setInterval(beep,2000);
+  startRing();
   try{if(Notification.permission==='granted')new Notification('Waktu istirahat habis',{body:$('#rmsg').textContent})}catch(e){}
 }
-$('#rok').onclick=()=>{clearInterval(ringTimer);$('#ring').classList.remove('on')};
+$('#rok').onclick=()=>{stopRing();$('#ring').classList.remove('on')};
 $('#astart').onclick=()=>startAlarm('');
 $('#astop').onclick=stopAlarm;
 
@@ -304,7 +379,7 @@ $('#esave').onclick=()=>{
 };
 $('#ecancel').onclick=closeEdit;
 $('#edit').addEventListener('keydown',e=>{if(e.key==='Escape')closeEdit();if(e.key==='Enter'&&e.target.tagName==='INPUT')$('#esave').click()});
-applyTheme();render();
+fillTypes();applyTheme();render();
 </script>
 </body>
 </html>
