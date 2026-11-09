@@ -76,6 +76,11 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
 .trow{display:grid;grid-template-columns:42px 1fr auto;gap:8px;margin-bottom:8px}
 .trow input[type=color]{width:42px;height:36px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 #snd input[type=range]{width:100%;accent-color:var(--acc)}
+.alarm{transition:box-shadow .3s}
+.tm{grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.clk{font-variant-numeric:tabular-nums;font-weight:800;font-size:1.05rem;margin-right:auto}
+.tm .btn{padding:4px 10px;font-size:.8rem}
+.t.doing{box-shadow:0 0 0 2px var(--acc)}.alarm.flash{box-shadow:0 0 0 3px var(--acc)}
 .hint{font-size:.75rem;color:var(--mute);margin:4px 0 10px}
 #terr{color:var(--bad);min-height:1em}
 </style>
@@ -169,9 +174,10 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
     <div><label for="edur">Durasi (menit)</label><input type="number" id="edur" min="5" step="5"></div>
   </div>
   <div><label for="ed">Tanggal</label><input type="date" id="ed"></div>
+  <div><label for="eel">Waktu terpakai (menit)</label><input type="number" id="eel" min="0" step="1"></div>
   <div class="row2"><button class="btn" id="ecancel">Batal</button><button class="btn pri" id="esave">Simpan perubahan</button></div>
 </div></div></div>
-<div id="ring"><div><h2>⏰ Waktu istirahat habis</h2><p id="rmsg"></p><button class="btn pri" id="rok">Oke, lanjut kerja</button></div></div>
+<div id="ring"><div><h2 id="rh">⏰ Waktu istirahat habis</h2><p id="rmsg"></p><button class="btn pri" id="rok">Oke, lanjut kerja</button></div></div>
 
 <script>
 const $=s=>document.querySelector(s);
@@ -248,22 +254,22 @@ function render(){
   const cmp={date:(a,b)=>a.date.localeCompare(b.date),dur:(a,b)=>b.dur-a.dur,prog:(a,b)=>b.prog-a.prog,title:(a,b)=>a.title.localeCompare(b.title),type:(a,b)=>a.type.localeCompare(b.type)};
   L.sort(cmp[so]);
   $('#list').innerHTML=L.length?L.map(t=>`
-  <div class="t${t.prog===100?' done':''}" style="--c:${col(t.type)}" data-id="${t.id}">
+  <div class="t${t.prog===100?' done':''}${t.run?' doing':''}" style="--c:${col(t.type)}" data-id="${t.id}">
     <input type="checkbox" ${t.prog===100?'checked':''} aria-label="Selesai">
     <div><div class="ti">${esc(t.title)}</div>
       <div class="meta"><span class="badge">${esc(t.type)}</span>${t.dur} menit · ${new Date(t.date+'T00:00').toLocaleDateString('id-ID',{day:'numeric',month:'short'})}</div></div>
     <div class="acts"><button class="btn" data-a="edit" title="Edit tugas">✎</button><button class="btn" data-a="rest" title="Mulai alarm istirahat">⏰</button><button class="btn" data-a="del" title="Hapus">✕</button></div>
-    <div class="pg"><div class="bar${t.prog===100?' ok':''}"><b style="width:${t.prog}%"></b></div><span>${t.prog}%</span>
+    ${timerRow(t)}<div class="pg"><div class="bar${t.prog===100?' ok':''}"><b style="width:${t.prog}%"></b></div><span>${t.prog}%</span>
       <input type="range" min="0" max="100" step="5" value="${t.prog}" aria-label="Progres tugas" style="grid-column:1/-1"></div>
   </div>`).join(''):'<div class="empty">Tidak ada tugas yang cocok. Tambahkan lewat form di kiri.</div>';
 }
 const task=el=>S.tasks.find(t=>t.id==el.closest('.t').dataset.id);
 $('#list').addEventListener('change',e=>{
-  if(e.target.type==='checkbox'){task(e.target).prog=e.target.checked?100:0;save();render()}
+  if(e.target.type==='checkbox'){setProg(task(e.target),e.target.checked?100:0);save();render()}
 });
 $('#list').addEventListener('input',e=>{
   if(e.target.type==='range'){
-    const t=task(e.target);t.prog=+e.target.value;
+    const t=task(e.target);setProg(t,+e.target.value);
     const box=e.target.closest('.t');
     box.querySelector('.bar b').style.width=t.prog+'%';
     box.querySelector('.pg span').textContent=t.prog+'%';
@@ -275,6 +281,8 @@ $('#list').addEventListener('click',e=>{
   const b=e.target.closest('[data-a]');if(!b)return;
   const t=task(b);
   if(b.dataset.a==='del'){S.tasks=S.tasks.filter(x=>x.id!==t.id);save();render()}
+  else if(b.dataset.a==='toggle')toggleTimer(t);
+  else if(b.dataset.a==='reset')resetTimer(t);
   else if(b.dataset.a==='edit')openEdit(t);
   else startAlarm(t.title);
 });
@@ -284,12 +292,13 @@ $('#list').addEventListener('click',e=>{
 let endAt=0,tick=null,label='',actx=null;
 function startAlarm(name){
   const m=Math.max(1,+$('#am').value||5);
-  if('Notification' in window&&Notification.permission==='default')Notification.requestPermission();
+  try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}
   try{actx=actx||new (window.AudioContext||window.webkitAudioContext)()}catch(e){}
   endAt=Date.now()+m*60000;label=name||'';
   $('#albl').textContent=name?`Istirahat setelah: ${name}`:'Istirahat berjalan';
   $('#astop').disabled=false;
   clearInterval(tick);tick=setInterval(upd,500);upd();
+  const a=$('.alarm');a.scrollIntoView({behavior:'smooth',block:'center'});a.classList.add('flash');setTimeout(()=>a.classList.remove('flash'),1500);
 }
 function upd(){
   const left=Math.max(0,endAt-Date.now());
@@ -355,7 +364,7 @@ $('#tsave').onclick=()=>{
 };
 
 function fire(){
-  stopAlarm();
+  stopAlarm();$('#rh').textContent='⏰ Waktu istirahat habis';
   $('#rmsg').textContent=label?`Saatnya kembali ke: ${label}`:'Saatnya kembali bekerja.';
   $('#ring').classList.add('on');
   startRing();
@@ -366,14 +375,51 @@ $('#astart').onclick=()=>startAlarm('');
 $('#astop').onclick=stopAlarm;
 
 $('#nd').value=sel;
+/* Timer tugas */
+const fmt=x=>{x=Math.ceil(x);const h=Math.floor(x/3600),m=Math.floor(x%3600/60);return (h?h+':'+pad(m):pad(m))+':'+pad(x%60)};
+const elapsed=t=>(t.el!=null?t.el:t.prog/100*t.dur*60)+(t.run?(Date.now()-t.run)/1000:0);
+function setProg(t,v){t.run=0;t.prog=v;t.el=v/100*t.dur*60}
+function timerRow(t){
+  const e=elapsed(t),f=t.dur*60,lab=t.run?'⏸ Jeda':(e>0&&t.prog<100?'▶ Lanjut':'▶ Mulai');
+  return `<div class="tm"><span class="clk">⏱ ${fmt(Math.max(0,f-e))}</span><button class="btn" data-a="toggle">${lab}</button>${e>0?'<button class="btn" data-a="reset">↺ Reset</button>':''}</div>`;
+}
+function toggleTimer(t){
+  if(t.run){t.el=elapsed(t);t.run=0}
+  else{
+    S.tasks.forEach(x=>{if(x.run){x.el=elapsed(x);x.run=0}});
+    if(t.prog===100||elapsed(t)>=t.dur*60){t.el=0;t.prog=0}
+    if(t.el==null)t.el=t.prog/100*t.dur*60;
+    try{actx=actx||new AC();actx.resume()}catch(e){}
+    t.run=Date.now();
+  }
+  save();render();
+}
+function resetTimer(t){t.el=0;t.run=0;t.prog=0;save();render()}
+function finishTask(t){
+  t.el=t.dur*60;t.run=0;t.prog=100;save();render();
+  $('#rh').textContent='⏰ Waktu tugas habis';$('#rmsg').textContent='Selesai: '+t.title;
+  $('#ring').classList.add('on');startRing();
+}
+setInterval(()=>{
+  S.tasks.forEach(t=>{
+    if(!t.run)return;
+    const e=elapsed(t),f=t.dur*60;
+    if(e>=f){finishTask(t);return}
+    t.prog=Math.min(99,Math.floor(e/f*100));
+    const c=document.querySelector(`.t[data-id="${t.id}"]`);
+    if(c){c.querySelector('.clk').textContent='⏱ '+fmt(f-e);c.querySelector('.bar b').style.width=t.prog+'%';c.querySelector('.pg span').textContent=t.prog+'%';c.querySelector('.pg input[type=range]').value=t.prog}
+  });
+},1000);
 /* Edit tugas */
 let eid=null;
 function closeEdit(){$('#edit').classList.remove('on')}
-function openEdit(t){eid=t.id;$('#et').value=t.title;$('#etype').value=t.type;$('#edur').value=t.dur;$('#ed').value=t.date;$('#edit').classList.add('on');$('#et').focus()}
+function openEdit(t){eid=t.id;$('#et').value=t.title;$('#etype').value=t.type;$('#edur').value=t.dur;$('#ed').value=t.date;$('#eel').value=Math.floor(elapsed(t)/60);$('#edit').classList.add('on');$('#et').focus()}
 $('#esave').onclick=()=>{
   const t=S.tasks.find(x=>x.id===eid),v=$('#et').value.trim();
   if(!t||!v){$('#et').focus();return}
-  t.title=v;t.type=$('#etype').value;t.dur=Math.max(5,+$('#edur').value||30);t.date=$('#ed').value||t.date;
+  const oe=Math.floor(elapsed(t)/60);if(t.el==null)t.el=t.prog/100*t.dur*60;t.title=v;t.type=$('#etype').value;t.dur=Math.max(5,+$('#edur').value||30);t.date=$('#ed').value||t.date;
+  const ne=Math.max(0,+$('#eel').value||0);if(ne!==oe){t.el=ne*60;if(t.run)t.run=Date.now()}
+  {const e=elapsed(t),f=t.dur*60;t.prog=Math.min(e>=f?100:99,Math.round(e/f*100));if(e>=f){t.el=f;t.run=0}}
   sel=t.date;const d=new Date(sel+'T00:00');vm=new Date(d.getFullYear(),d.getMonth(),1);$('#nd').value=sel;
   closeEdit();save();render();
 };
