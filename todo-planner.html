@@ -77,8 +77,8 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
 .trow input[type=color]{width:42px;height:36px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 #snd input[type=range]{width:100%;accent-color:var(--acc)}
 .alarm{transition:box-shadow .3s}
-.dayhead .carry{font-weight:600;margin:0 0 10px}
-.dayhead .carry.warn{color:var(--bad)}
+.day .warn{position:absolute;top:2px;right:4px;font-size:.7rem;line-height:1;color:var(--bad)}
+.day.sel .warn{color:#ffd84d}
 .chart{display:flex;gap:4px;overflow-x:auto;align-items:flex-end;height:150px;margin-top:12px}
 .col{flex:1 0 24px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;background:none;border:0;border-radius:6px;padding:2px 0;height:100%}
 .col .bb{width:60%;min-height:2px;background:var(--acc);border-radius:4px 4px 0 0}
@@ -149,7 +149,6 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
     <div class="card dayhead">
       <h2 id="dt"></h2>
       <p id="ds"></p>
-      <p id="carry" class="carry"></p>
       <div class="bar" id="dbar"><b></b></div>
     </div>
     <div class="filters">
@@ -231,8 +230,9 @@ function renderCal(){
   for(let d=1;d<=n;d++){
     const key=vm.getFullYear()+'-'+pad(vm.getMonth()+1)+'-'+pad(d);
     const ts=S.tasks.filter(t=>t.date===key);
+    const od=key<today?ts.filter(t=>t.prog<100).length:0;
     const dots=ts.slice(0,3).map(t=>`<i class="${t.prog===100?'d':''}"></i>`).join('');
-    h+=`<button class="day${key===today?' today':''}${key===sel?' sel':''}" data-d="${key}">${d}<span class="dots">${dots}</span></button>`;
+    h+=`<button class="day${key===today?' today':''}${key===sel?' sel':''}" data-d="${key}"${od?` title="${od} tugas belum selesai"`:''}>${d}${od?'<span class="warn">⚠︎</span>':''}<span class="dots">${dots}</span></button>`;
   }
   $('#cal').innerHTML=h;renderChart();
 }
@@ -261,11 +261,6 @@ function render(){
   const avg=dayTasks.length?Math.round(dayTasks.reduce((a,t)=>a+t.prog,0)/dayTasks.length):0;
   $('#dt').textContent=new Date(sel+'T00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   $('#ds').textContent=dayTasks.length?`${done} dari ${dayTasks.length} tugas selesai · progres rata-rata ${avg}%`:'Belum ada tugas di hari ini';
-  const pd=new Date(sel+'T00:00');pd.setDate(pd.getDate()-1);
-  const late=S.tasks.filter(t=>t.date<sel&&t.prog<100),yd=late.filter(t=>t.date===ymd(pd)).length,cr=$('#carry');
-  cr.classList.toggle('warn',late.length>0);
-  cr.innerHTML=late.length?`⚠ ${late.length} tugas dari hari sebelumnya belum selesai (${yd} dari sehari sebelumnya) <button class="btn" id="cb" style="padding:2px 8px;font-size:.78rem;margin-left:6px">Lihat</button>`:'✓ Tidak ada tugas tertunda dari hari sebelumnya';
-  if(late.length)$('#cb').onclick=()=>{$('#fscope').value='late';$('#fstat').value='';render()};
   const db=$('#dbar');db.firstElementChild.style.width=(dayTasks.length?done/dayTasks.length*100:0)+'%';
   db.classList.toggle('ok',dayTasks.length>0&&done===dayTasks.length);
 
