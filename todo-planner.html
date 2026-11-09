@@ -77,6 +77,17 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
 .trow input[type=color]{width:42px;height:36px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 #snd input[type=range]{width:100%;accent-color:var(--acc)}
 .alarm{transition:box-shadow .3s}
+.dayhead .carry{font-weight:600;margin:0 0 10px}
+.dayhead .carry.warn{color:var(--bad)}
+.chart{display:flex;gap:4px;overflow-x:auto;align-items:flex-end;height:150px;margin-top:12px}
+.col{flex:1 0 24px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;background:none;border:0;border-radius:6px;padding:2px 0;height:100%}
+.col .bb{width:60%;min-height:2px;background:var(--acc);border-radius:4px 4px 0 0}
+.col.past .bb{background:var(--bad)}
+.col.z .bb{background:var(--line)}
+.col.sel{background:var(--bg)}
+.col .n{font-size:.7rem;font-weight:700;height:1em}
+.col .x{font-size:.7rem;color:var(--mute)}
+.col.sel .x{color:var(--ink);font-weight:800}
 .tm{grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .clk{font-variant-numeric:tabular-nums;font-weight:800;font-size:1.05rem;margin-right:auto}
 .tm .btn{padding:4px 10px;font-size:.8rem}
@@ -138,15 +149,22 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
     <div class="card dayhead">
       <h2 id="dt"></h2>
       <p id="ds"></p>
+      <p id="carry" class="carry"></p>
       <div class="bar" id="dbar"><b></b></div>
     </div>
     <div class="filters">
-      <select id="fscope" aria-label="Cakupan"><option value="day">Hari terpilih</option><option value="all">Semua hari</option></select>
+      <select id="fscope" aria-label="Cakupan"><option value="day">Hari terpilih</option><option value="all">Semua hari</option><option value="late">Tertunda dari hari sebelumnya</option></select>
       <select id="fstat" aria-label="Status"><option value="">Semua status</option><option value="todo">Belum selesai</option><option value="done">Selesai</option></select>
       <select id="ftype" aria-label="Tipe"><option value="">Semua tipe</option><option>Tugas</option><option>Ujian</option><option>Proyek</option><option>Bacaan</option><option>Lainnya</option></select>
       <select id="sort" aria-label="Urutkan"><option value="date">Urut: tanggal</option><option value="dur">Urut: durasi</option><option value="prog">Urut: progres</option><option value="title">Urut: judul</option><option value="type">Urut: tipe</option></select>
     </div>
     <div class="list" id="list"></div>
+  </section>
+<section class="card" style="grid-column:1/-1">
+    <h2 id="ctitle" style="font-size:1.05rem;font-weight:800"></h2>
+    <p class="meta" id="csum" style="margin-top:2px"></p>
+    <div class="chart" id="chart"></div>
+    <p class="hint">Merah: hari yang sudah lewat. Biru: hari ini dan ke depan. Klik batang untuk membuka harinya.</p>
   </section>
 </main>
 
@@ -216,7 +234,7 @@ function renderCal(){
     const dots=ts.slice(0,3).map(t=>`<i class="${t.prog===100?'d':''}"></i>`).join('');
     h+=`<button class="day${key===today?' today':''}${key===sel?' sel':''}" data-d="${key}">${d}<span class="dots">${dots}</span></button>`;
   }
-  $('#cal').innerHTML=h;
+  $('#cal').innerHTML=h;renderChart();
 }
 $('#cal').onclick=e=>{const b=e.target.closest('.day');if(!b)return;sel=b.dataset.d;$('#nd').value=sel;render()};
 $('#prev').onclick=()=>{vm.setMonth(vm.getMonth()-1);renderCal()};
@@ -243,10 +261,15 @@ function render(){
   const avg=dayTasks.length?Math.round(dayTasks.reduce((a,t)=>a+t.prog,0)/dayTasks.length):0;
   $('#dt').textContent=new Date(sel+'T00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   $('#ds').textContent=dayTasks.length?`${done} dari ${dayTasks.length} tugas selesai · progres rata-rata ${avg}%`:'Belum ada tugas di hari ini';
+  const pd=new Date(sel+'T00:00');pd.setDate(pd.getDate()-1);
+  const late=S.tasks.filter(t=>t.date<sel&&t.prog<100),yd=late.filter(t=>t.date===ymd(pd)).length,cr=$('#carry');
+  cr.classList.toggle('warn',late.length>0);
+  cr.innerHTML=late.length?`⚠ ${late.length} tugas dari hari sebelumnya belum selesai (${yd} dari sehari sebelumnya) <button class="btn" id="cb" style="padding:2px 8px;font-size:.78rem;margin-left:6px">Lihat</button>`:'✓ Tidak ada tugas tertunda dari hari sebelumnya';
+  if(late.length)$('#cb').onclick=()=>{$('#fscope').value='late';$('#fstat').value='';render()};
   const db=$('#dbar');db.firstElementChild.style.width=(dayTasks.length?done/dayTasks.length*100:0)+'%';
   db.classList.toggle('ok',dayTasks.length>0&&done===dayTasks.length);
 
-  let L=$('#fscope').value==='all'?[...S.tasks]:dayTasks;
+  const sc=$('#fscope').value;let L=sc==='all'?[...S.tasks]:sc==='late'?S.tasks.filter(t=>t.date<sel&&t.prog<100):dayTasks;
   const st=$('#fstat').value, ty=$('#ftype').value, so=$('#sort').value;
   if(st==='done')L=L.filter(t=>t.prog===100);
   if(st==='todo')L=L.filter(t=>t.prog<100);
@@ -375,6 +398,16 @@ $('#astart').onclick=()=>startAlarm('');
 $('#astop').onclick=stopAlarm;
 
 $('#nd').value=sel;
+/* Grafik tugas belum selesai */
+function renderChart(){
+  const y=vm.getFullYear(),m=vm.getMonth(),n=new Date(y,m+1,0).getDate(),C=[];
+  for(let d=1;d<=n;d++){const k=y+'-'+pad(m+1)+'-'+pad(d);C.push([d,k,S.tasks.filter(t=>t.date===k&&t.prog<100).length])}
+  const mx=Math.max(1,...C.map(c=>c[2])),tot=C.reduce((a,c)=>a+c[2],0);
+  $('#ctitle').textContent='Tugas belum selesai per hari · '+BLN[m]+' '+y;
+  $('#csum').textContent=tot?`${tot} tugas belum selesai di bulan ini`:'Tidak ada tugas yang belum selesai di bulan ini';
+  $('#chart').innerHTML=C.map(([d,k,c])=>`<button class="col${k===sel?' sel':''}${k<today?' past':''}${c?'':' z'}" data-d="${k}" title="${d} ${BLN[m]}: ${c} belum selesai"><span class="n">${c||''}</span><span class="bb" style="height:${c/mx*100}px"></span><span class="x">${d}</span></button>`).join('');
+}
+$('#chart').onclick=e=>{const b=e.target.closest('.col');if(b){sel=b.dataset.d;$('#nd').value=sel;render()}};
 /* Timer tugas */
 const fmt=x=>{x=Math.ceil(x);const h=Math.floor(x/3600),m=Math.floor(x%3600/60);return (h?h+':'+pad(m):pad(m))+':'+pad(x%60)};
 const elapsed=t=>(t.el!=null?t.el:t.prog/100*t.dur*60)+(t.run?(Date.now()-t.run)/1000:0);
