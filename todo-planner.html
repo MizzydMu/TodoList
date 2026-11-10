@@ -77,6 +77,9 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
 .trow input[type=color]{width:42px;height:36px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 #snd input[type=range]{width:100%;accent-color:var(--acc)}
 .alarm{transition:box-shadow .3s}
+.lg{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:600;margin-right:14px}
+.lg i{width:14px;height:4px;border-radius:2px;display:inline-block}
+#lchart text{font-size:10px;fill:var(--mute)}
 .day .warn{position:absolute;top:2px;right:4px;font-size:.7rem;line-height:1;color:var(--bad)}
 .day.sel .warn{color:#ffd84d}
 .chart{display:flex;gap:4px;overflow-x:auto;align-items:flex-end;height:150px;margin-top:12px}
@@ -160,6 +163,12 @@ input[type=text],input[type=date],input[type=number],select{width:100%;padding:8
     <div class="list" id="list"></div>
   </section>
 <section class="card" style="grid-column:1/-1">
+    <h2 id="ltitle" style="font-size:1.05rem;font-weight:800"></h2>
+    <div id="lleg" style="margin:6px 0"></div>
+    <div style="overflow-x:auto" id="lchart"></div>
+    <p class="hint">Dihitung dari tugas berstatus selesai (progres 100%) pada tanggal tugas tersebut.</p>
+  </section>
+  <section class="card" style="grid-column:1/-1">
     <h2 id="ctitle" style="font-size:1.05rem;font-weight:800"></h2>
     <p class="meta" id="csum" style="margin-top:2px"></p>
     <div class="chart" id="chart"></div>
@@ -394,7 +403,21 @@ $('#astop').onclick=stopAlarm;
 
 $('#nd').value=sel;
 /* Grafik tugas belum selesai */
+function renderLine(){
+  const y=vm.getFullYear(),m=vm.getMonth(),n=new Date(y,m+1,0).getDate(),W=Math.max(600,n*26),H=200,P=30;
+  const D=S.types.map(ty=>({ty,v:Array.from({length:n},(_,i)=>{const k=y+'-'+pad(m+1)+'-'+pad(i+1);return S.tasks.filter(t=>t.date===k&&t.type===ty.name&&t.prog===100).length})}));
+  const mx=Math.max(1,...D.flatMap(d=>d.v)),X=i=>P+i*(W-2*P)/Math.max(1,n-1),Y=v=>H-P-v/mx*(H-2*P);
+  $('#ltitle').textContent='Tugas selesai per tipe · '+BLN[m]+' '+y;
+  $('#lleg').innerHTML=D.map(d=>`<span class="lg"><i style="background:${d.ty.color}"></i>${esc(d.ty.name)} (${d.v.reduce((a,b)=>a+b,0)})</span>`).join('');
+  if(!D.some(d=>d.v.some(c=>c))){$('#lchart').innerHTML='<p class="empty">Belum ada tugas selesai di bulan ini.</p>';return}
+  const ticks=[...new Set([0,Math.ceil(mx/2),mx])];
+  $('#lchart').innerHTML=`<svg id="lsvg" viewBox="0 0 ${W} ${H}" style="width:100%;min-width:${W}px;height:auto" role="img" aria-label="Grafik garis tugas selesai per tipe">
+  <g stroke="var(--line)">${ticks.map(v=>`<line x1="${P}" x2="${W-P}" y1="${Y(v)}" y2="${Y(v)}"/><text x="4" y="${Y(v)+3}" stroke="none">${v}</text>`).join('')}</g>
+  ${Array.from({length:n},(_,i)=>`<text x="${X(i)}" y="${H-8}" text-anchor="middle">${i+1}</text>`).join('')}
+  ${D.map(d=>`<polyline fill="none" stroke="${d.ty.color}" stroke-width="2.5" stroke-linejoin="round" points="${d.v.map((c,i)=>X(i)+','+Y(c)).join(' ')}"/>${d.v.map((c,i)=>c?`<circle cx="${X(i)}" cy="${Y(c)}" r="4" fill="${d.ty.color}"><title>${esc(d.ty.name)}, tanggal ${i+1}: ${c} selesai</title></circle>`:'').join('')}`).join('')}</svg>`;
+}
 function renderChart(){
+  renderLine();
   const y=vm.getFullYear(),m=vm.getMonth(),n=new Date(y,m+1,0).getDate(),C=[];
   for(let d=1;d<=n;d++){const k=y+'-'+pad(m+1)+'-'+pad(d);C.push([d,k,S.tasks.filter(t=>t.date===k&&t.prog<100).length])}
   const mx=Math.max(1,...C.map(c=>c[2])),tot=C.reduce((a,c)=>a+c[2],0);
